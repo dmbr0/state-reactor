@@ -12,20 +12,57 @@ import './App.css';
 // Registry Debug View
 function RegistryViewer() {
   const [actors, setActors] = React.useState([]);
+  const [expandedActor, setExpandedActor] = React.useState(null);
   
   // Update the actor list every second
   React.useEffect(() => {
     const updateActors = () => {
       const registry = getRegistry();
-      setActors(Array.from(registry.keys()));
+      const mailboxes = getMailboxes();
+      
+      // Create a more detailed actor list with mailbox info
+      const actorsList = Array.from(registry.keys()).map(actorId => {
+        const mailbox = mailboxes.get(actorId);
+        return {
+          id: actorId,
+          queueSize: mailbox?.queue.length || 0,
+          autoProcess: mailbox?.autoProcess || false,
+          processInterval: mailbox?.processInterval || 0,
+          type: actorId.startsWith('global:') ? 'global' : 
+                actorId.startsWith('counter') ? 'counter' :
+                actorId.startsWith('display') ? 'display' :
+                actorId.startsWith('sender') ? 'sender' :
+                actorId === 'todos' ? 'todos' : 'other'
+        };
+      });
+      
+      // Sort actors by type and then by ID
+      actorsList.sort((a, b) => {
+        if (a.type !== b.type) {
+          // Order by type: global, counter, display, todos, sender, other
+          const typeOrder = { 'global': 0, 'counter': 1, 'display': 2, 'todos': 3, 'sender': 4, 'other': 5 };
+          return typeOrder[a.type] - typeOrder[b.type];
+        }
+        return a.id.localeCompare(b.id);
+      });
+      
+      setActors(actorsList);
     };
     
     // Update immediately and set interval
     updateActors();
-    const interval = setInterval(updateActors, 1000);
+    const interval = setInterval(updateActors, 500);
     
     return () => clearInterval(interval);
   }, []);
+  
+  const toggleActorDetails = (actorId) => {
+    if (expandedActor === actorId) {
+      setExpandedActor(null);
+    } else {
+      setExpandedActor(actorId);
+    }
+  };
   
   return (
     <div className="component registry-viewer">
@@ -35,9 +72,27 @@ function RegistryViewer() {
         <h3>Registered Actors:</h3>
         {actors.length > 0 ? (
           <ul>
-            {actors.map((actorId, index) => (
-              <li key={index} className="actor-item">
-                {actorId}
+            {actors.map((actor) => (
+              <li 
+                key={actor.id} 
+                className={`actor-item ${actor.type}`}
+                onClick={() => toggleActorDetails(actor.id)}
+              >
+                <div className="actor-header">
+                  <span className="actor-id">{actor.id}</span>
+                  <span className="actor-type-badge">{actor.type}</span>
+                  {actor.queueSize > 0 && (
+                    <span className="queue-badge">{actor.queueSize}</span>
+                  )}
+                </div>
+                
+                {expandedActor === actor.id && (
+                  <div className="actor-details">
+                    <div>Queue Size: {actor.queueSize}</div>
+                    <div>Auto-Process: {actor.autoProcess ? 'On' : 'Off'}</div>
+                    <div>Process Interval: {actor.processInterval}ms</div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -194,24 +249,10 @@ function MailboxViewer({ actorId, mailbox, onProcess, onProcessAll, onConfigure 
   );
 }
 
-// Counter Component using useActor
-function Counter({ id }) {
-  // Define message handler
-  const handleMessage = (state, message) => {
-    console.log("Counter handler called with:", message);
-    switch (message.type) {
-      case 'INCREMENT':
-        return state + (message.payload || 1);
-      case 'DECREMENT':
-        return state - (message.payload || 1);
-      case 'RESET':
-        return 0;
-      default:
-        return state;
-    }
-  };
-
-  // Use the actor hook with mailbox functionality
+// Counter Component using persistent actor
+function Counter() {
+  // Get the persistent counter actor
+  const { counterActor } = usePersistentActors();
   const { 
     state: count, 
     send, 
@@ -220,11 +261,7 @@ function Counter({ id }) {
     processNextMessage,
     processAllMessages,
     configureMailbox 
-  } = useActor(
-    id,
-    0,
-    handleMessage
-  );
+  } = counterActor;
 
   const handleIncrement = () => {
     console.log("Increment button clicked");
@@ -265,23 +302,11 @@ function Counter({ id }) {
 }
 
 // Message Display Component
-function MessageDisplay({ id }) {
-  const messageHandler = (state, message) => {
-    console.log("MessageDisplay handler called with:", message);
-    if (message.type === 'NEW_MESSAGE') {
-      // Add the message to the state with timestamp
-      return [
-        ...state, 
-        { 
-          text: message.payload, 
-          sender: message.sender, 
-          time: new Date().toLocaleTimeString() 
-        }
-      ].slice(-5); // Keep only last 5 messages
-    }
-    return state;
-  };
-
+function MessageDisplay({ displayId }) {
+  // Get the persistent display actor
+  const { display1Actor, display2Actor } = usePersistentActors();
+  const displayActor = displayId === "display1" ? display1Actor : display2Actor;
+  
   const { 
     state: messages, 
     id: actorId,
@@ -289,11 +314,7 @@ function MessageDisplay({ id }) {
     processNextMessage,
     processAllMessages,
     configureMailbox 
-  } = useActor(
-    id,
-    [],
-    messageHandler
-  );
+  } = displayActor;
 
   return (
     <div className="message-display-container">
@@ -426,25 +447,12 @@ function ThemeToggler() {
   );
 }
 
-// Todo List Component - Using standard actor hook for simplicity
+// Todo List Component - Using persistent actor
 function TodoList() {
   const [newTodo, setNewTodo] = React.useState('');
 
-  const todoHandler = (state, message) => {
-    console.log("TodoList handler called with:", message, "Current state:", state);
-    switch (message.type) {
-      case 'ADD_TODO':
-        console.log(`Adding todo: ${message.payload}`);
-        return [...state, message.payload];
-      case 'REMOVE_TODO':
-        return state.filter((_, i) => i !== message.payload);
-      case 'CLEAR_TODOS':
-        return [];
-      default:
-        return state;
-    }
-  };
-
+  // Get the persistent todo actor
+  const { todoActor } = usePersistentActors();
   const { 
     state: todos, 
     send, 
@@ -453,11 +461,7 @@ function TodoList() {
     processNextMessage,
     processAllMessages,
     configureMailbox
-  } = useActor(
-    "todos", // Fixed ID
-    [], // Empty initial state
-    todoHandler
-  );
+  } = todoActor;
 
   const handleAddTodo = () => {
     if (newTodo.trim()) {
@@ -562,7 +566,7 @@ function Tabs() {
       <div className="tab-content">
         {activeTab === 'counter' && (
           <div className="grid">
-            <Counter id="counter1" />
+            <Counter />
             <div className="sidebar">
               <RegistryViewer />
               <ThemeToggler />
@@ -575,8 +579,8 @@ function Tabs() {
             <div className="messaging-section">
               <MessageSender />
               <div className="displays-container">
-                <MessageDisplay id="display1" />
-                <MessageDisplay id="display2" />
+                <MessageDisplay displayId="display1" />
+                <MessageDisplay displayId="display2" />
               </div>
             </div>
             <div className="sidebar">
@@ -600,6 +604,111 @@ function Tabs() {
   );
 }
 
+// Persistent Actors Wrapper
+function PersistentActors({ children }) {
+  // Create persistent Counter actor
+  const counterActor = useActor(
+    "counter1",
+    0,
+    (state, message) => {
+      console.log("Counter handler called with:", message);
+      switch (message.type) {
+        case 'INCREMENT':
+          return state + (message.payload || 1);
+        case 'DECREMENT':
+          return state - (message.payload || 1);
+        case 'RESET':
+          return 0;
+        default:
+          return state;
+      }
+    }
+  );
+  
+  // Create persistent Display actors
+  const display1Actor = useActor(
+    "display1",
+    [],
+    (state, message) => {
+      console.log("MessageDisplay1 handler called with:", message);
+      if (message.type === 'NEW_MESSAGE') {
+        // Add the message to the state with timestamp
+        return [
+          ...state, 
+          { 
+            text: message.payload, 
+            sender: message.sender, 
+            time: new Date().toLocaleTimeString() 
+          }
+        ].slice(-5); // Keep only last 5 messages
+      }
+      return state;
+    }
+  );
+  
+  const display2Actor = useActor(
+    "display2",
+    [],
+    (state, message) => {
+      console.log("MessageDisplay2 handler called with:", message);
+      if (message.type === 'NEW_MESSAGE') {
+        // Add the message to the state with timestamp
+        return [
+          ...state, 
+          { 
+            text: message.payload, 
+            sender: message.sender, 
+            time: new Date().toLocaleTimeString() 
+          }
+        ].slice(-5); // Keep only last 5 messages
+      }
+      return state;
+    }
+  );
+  
+  // Create persistent TodoList actor
+  const todoActor = useActor(
+    "todos",
+    [],
+    (state, message) => {
+      console.log("TodoList handler called with:", message, "Current state:", state);
+      switch (message.type) {
+        case 'ADD_TODO':
+          console.log(`Adding todo: ${message.payload}`);
+          return [...state, message.payload];
+        case 'REMOVE_TODO':
+          return state.filter((_, i) => i !== message.payload);
+        case 'CLEAR_TODOS':
+          return [];
+        default:
+          return state;
+      }
+    }
+  );
+  
+  // Make actors available to all children through React context
+  const actorsContext = {
+    counterActor,
+    display1Actor,
+    display2Actor,
+    todoActor
+  };
+  
+  return (
+    <ActorsContext.Provider value={actorsContext}>
+      {children}
+    </ActorsContext.Provider>
+  );
+}
+
+// Create context for sharing actors
+const ActorsContext = React.createContext({});
+
+// Custom hook to use persistent actors
+function usePersistentActors() {
+  return React.useContext(ActorsContext);
+}
+
 // Main App
 function App() {
   return (
@@ -610,7 +719,9 @@ function App() {
       </header>
       
       <main>
-        <Tabs />
+        <PersistentActors>
+          <Tabs />
+        </PersistentActors>
       </main>
       
       <footer>
