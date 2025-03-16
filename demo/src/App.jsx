@@ -1,5 +1,12 @@
 import React from 'react';
-import { useActor, useGlobalActor, useSender, ActorComponent, getRegistry } from './statereactor';
+import { 
+  useActor, 
+  useGlobalActor, 
+  useSender, 
+  ActorComponent, 
+  getRegistry, 
+  getMailboxes 
+} from './statereactor';
 import './App.css';
 
 // Registry Debug View
@@ -42,6 +49,110 @@ function RegistryViewer() {
   );
 }
 
+// Mailbox Controls Component
+function MailboxControls({ actorId, mailbox, onProcess, onProcessAll, onConfigure }) {
+  const [processingRate, setProcessingRate] = React.useState(mailbox.processInterval);
+  
+  const handleAutoProcessToggle = () => {
+    onConfigure({ autoProcess: !mailbox.autoProcess, processInterval: processingRate });
+  };
+  
+  const handleRateChange = (e) => {
+    const newRate = parseInt(e.target.value, 10);
+    setProcessingRate(newRate);
+  };
+  
+  const applyRateChange = () => {
+    onConfigure({ processInterval: processingRate });
+  };
+  
+  return (
+    <div className="mailbox-controls">
+      <div className="controls-row">
+        <button onClick={onProcess} disabled={mailbox.queue.length === 0}>
+          Process Next
+        </button>
+        <button onClick={onProcessAll} disabled={mailbox.queue.length === 0}>
+          Process All ({mailbox.queue.length})
+        </button>
+      </div>
+      <div className="controls-row auto-process">
+        <label>
+          <input 
+            type="checkbox" 
+            checked={mailbox.autoProcess} 
+            onChange={handleAutoProcessToggle}
+          />
+          Auto-Process
+        </label>
+        <div className="rate-control">
+          <input 
+            type="range" 
+            min="50" 
+            max="1000" 
+            step="50" 
+            value={processingRate} 
+            onChange={handleRateChange}
+            disabled={!mailbox.autoProcess}
+          />
+          <div className="rate-values">
+            <span>Fast</span>
+            <span>
+              {processingRate}ms
+              <button 
+                className="apply-btn" 
+                onClick={applyRateChange}
+                disabled={!mailbox.autoProcess || processingRate === mailbox.processInterval}
+              >
+                Apply
+              </button>
+            </span>
+            <span>Slow</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mailbox Viewer Component
+function MailboxViewer({ actorId, mailbox, onProcess, onProcessAll, onConfigure }) {
+  return (
+    <div className="component mailbox-viewer">
+      <h2>Mailbox: {actorId}</h2>
+      <MailboxControls 
+        actorId={actorId}
+        mailbox={mailbox}
+        onProcess={onProcess}
+        onProcessAll={onProcessAll}
+        onConfigure={onConfigure}
+      />
+      <div className="mailbox-messages">
+        <h3>Message Queue: {mailbox.queue.length} message(s)</h3>
+        {mailbox.queue.length > 0 ? (
+          <ul>
+            {mailbox.queue.map((message, index) => (
+              <li key={index} className="message-item">
+                <div className="message-type">{message.type}</div>
+                {message.payload !== undefined && (
+                  <div className="message-payload">
+                    Payload: {typeof message.payload === 'object' 
+                      ? JSON.stringify(message.payload) 
+                      : String(message.payload)}
+                  </div>
+                )}
+                <div className="message-sender">From: {message.sender}</div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty">Queue is empty</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Counter Component using useActor
 function Counter({ id }) {
   // Define message handler
@@ -59,8 +170,16 @@ function Counter({ id }) {
     }
   };
 
-  // Use the actor hook
-  const { state: count, send, id: actorId } = useActor(
+  // Use the actor hook with mailbox functionality
+  const { 
+    state: count, 
+    send, 
+    id: actorId,
+    mailbox,
+    processNextMessage,
+    processAllMessages,
+    configureMailbox 
+  } = useActor(
     id,
     0,
     handleMessage
@@ -82,14 +201,24 @@ function Counter({ id }) {
   };
 
   return (
-    <div className="component counter">
-      <h2>Counter ({actorId})</h2>
-      <p className="value">{count}</p>
-      <div className="controls counter-buttons">
-        <button className="counter-button" onClick={handleIncrement}>+</button>
-        <button className="counter-button" onClick={handleDecrement}>-</button>
-        <button className="counter-button" onClick={handleReset}>Reset</button>
+    <div className="counter-container">
+      <div className="component counter compact">
+        <h3>Counter ({actorId})</h3>
+        <p className="value">{count}</p>
+        <div className="controls counter-buttons">
+          <button className="counter-button" onClick={handleIncrement}>+</button>
+          <button className="counter-button" onClick={handleDecrement}>-</button>
+          <button className="counter-button" onClick={handleReset}>Reset</button>
+        </div>
       </div>
+      
+      <MailboxViewer 
+        actorId={actorId}
+        mailbox={mailbox}
+        onProcess={processNextMessage}
+        onProcessAll={processAllMessages}
+        onConfigure={configureMailbox}
+      />
     </div>
   );
 }
@@ -112,28 +241,45 @@ function MessageDisplay({ id }) {
     return state;
   };
 
-  const { state: messages, id: actorId } = useActor(
+  const { 
+    state: messages, 
+    id: actorId,
+    mailbox,
+    processNextMessage,
+    processAllMessages,
+    configureMailbox 
+  } = useActor(
     id,
     [],
     messageHandler
   );
 
   return (
-    <div className="component message-display">
-      <h2>Message Display ({actorId})</h2>
-      <div className="messages">
-        {messages.length === 0 ? (
-          <p className="empty">No messages yet</p>
-        ) : (
-          messages.map((msg, index) => (
-            <div key={index} className="message">
-              <span className="sender">{msg.sender}: </span>
-              <span className="text">{msg.text}</span>
-              <span className="time">{msg.time}</span>
-            </div>
-          ))
-        )}
+    <div className="message-display-container">
+      <div className="component message-display">
+        <h2>Message Display ({actorId})</h2>
+        <div className="messages">
+          {messages.length === 0 ? (
+            <p className="empty">No messages yet</p>
+          ) : (
+            messages.map((msg, index) => (
+              <div key={index} className="message">
+                <span className="sender">{msg.sender}: </span>
+                <span className="text">{msg.text}</span>
+                <span className="time">{msg.time}</span>
+              </div>
+            ))
+          )}
+        </div>
       </div>
+      
+      <MailboxViewer 
+        actorId={actorId}
+        mailbox={mailbox}
+        onProcess={processNextMessage}
+        onProcessAll={processAllMessages}
+        onConfigure={configureMailbox}
+      />
     </div>
   );
 }
@@ -192,7 +338,15 @@ function ThemeToggler() {
     }
   };
 
-  const { state: theme, send, id } = useGlobalActor(
+  const { 
+    state: theme, 
+    send, 
+    id,
+    mailbox,
+    processNextMessage,
+    processAllMessages,
+    configureMailbox 
+  } = useGlobalActor(
     'theme',
     'light',
     themeHandler
@@ -211,12 +365,22 @@ function ThemeToggler() {
   };
 
   return (
-    <div className="component theme-toggler">
-      <h2>Theme Control ({id})</h2>
-      <p>Current theme: {theme}</p>
-      <button onClick={toggleTheme}>
-        Toggle Theme
-      </button>
+    <div className="theme-container">
+      <div className="component theme-toggler">
+        <h2>Theme Control ({id})</h2>
+        <p>Current theme: {theme}</p>
+        <button onClick={toggleTheme}>
+          Toggle Theme
+        </button>
+      </div>
+      
+      <MailboxViewer 
+        actorId={id}
+        mailbox={mailbox}
+        onProcess={processNextMessage}
+        onProcessAll={processAllMessages}
+        onConfigure={configureMailbox}
+      />
     </div>
   );
 }
@@ -240,7 +404,15 @@ function TodoList() {
     }
   };
 
-  const { state: todos, send, id } = useActor(
+  const { 
+    state: todos, 
+    send, 
+    id,
+    mailbox,
+    processNextMessage,
+    processAllMessages,
+    configureMailbox
+  } = useActor(
     "todos", // Fixed ID
     [], // Empty initial state
     todoHandler
@@ -272,42 +444,117 @@ function TodoList() {
   };
 
   return (
-    <div className="component todo-list">
-      <h2>Todo List ({id})</h2>
-      <div className="add-todo">
-        <input
-          type="text"
-          value={newTodo}
-          onChange={(e) => setNewTodo(e.target.value)}
-          placeholder="Add a todo..."
-          onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
-        />
-        <button onClick={handleAddTodo}>Add</button>
+    <div className="todo-container">
+      <div className="component todo-list">
+        <h2>Todo List ({id})</h2>
+        <div className="add-todo">
+          <input
+            type="text"
+            value={newTodo}
+            onChange={(e) => setNewTodo(e.target.value)}
+            placeholder="Add a todo..."
+            onKeyDown={(e) => e.key === 'Enter' && handleAddTodo()}
+          />
+          <button onClick={handleAddTodo}>Add</button>
+        </div>
+        
+        {todos.length === 0 ? (
+          <p className="empty">No todos yet</p>
+        ) : (
+          <ul className="todos">
+            {todos.map((todo, index) => (
+              <li key={index} className="todo-item">
+                {todo}
+                <button onClick={() => handleRemoveTodo(index)}>
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        
+        {todos.length > 0 && (
+          <button 
+            className="clear-all"
+            onClick={handleClearTodos}
+          >
+            Clear All
+          </button>
+        )}
       </div>
       
-      {todos.length === 0 ? (
-        <p className="empty">No todos yet</p>
-      ) : (
-        <ul className="todos">
-          {todos.map((todo, index) => (
-            <li key={index} className="todo-item">
-              {todo}
-              <button onClick={() => handleRemoveTodo(index)}>
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <MailboxViewer 
+        actorId={id}
+        mailbox={mailbox}
+        onProcess={processNextMessage}
+        onProcessAll={processAllMessages}
+        onConfigure={configureMailbox}
+      />
+    </div>
+  );
+}
+
+// Tabs Component
+function Tabs() {
+  const [activeTab, setActiveTab] = React.useState('counter');
+  
+  const tabs = [
+    { id: 'counter', label: 'Counter' },
+    { id: 'messaging', label: 'Messaging' },
+    { id: 'todos', label: 'Todo List' },
+  ];
+  
+  return (
+    <div className="tabs-container">
+      <div className="tabs-header">
+        {tabs.map(tab => (
+          <button 
+            key={tab.id}
+            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
       
-      {todos.length > 0 && (
-        <button 
-          className="clear-all"
-          onClick={handleClearTodos}
-        >
-          Clear All
-        </button>
-      )}
+      <div className="tab-content">
+        {activeTab === 'counter' && (
+          <div className="grid">
+            <Counter id="counter1" />
+            <div className="sidebar">
+              <RegistryViewer />
+              <ThemeToggler />
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'messaging' && (
+          <div className="grid">
+            <div className="messaging-section">
+              <MessageSender />
+              <div className="displays-container">
+                <MessageDisplay id="display1" />
+                <MessageDisplay id="display2" />
+              </div>
+            </div>
+            <div className="sidebar">
+              <RegistryViewer />
+              <ThemeToggler />
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'todos' && (
+          <div className="grid">
+            <TodoList />
+            <div className="sidebar">
+              <RegistryViewer />
+              <ThemeToggler />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -322,19 +569,7 @@ function App() {
       </header>
       
       <main>
-        <div className="grid">
-          <Counter id="counter1" />
-          <RegistryViewer />
-          <div className="messaging-container">
-            <MessageSender />
-            <div className="displays">
-              <MessageDisplay id="display1" />
-              <MessageDisplay id="display2" />
-            </div>
-          </div>
-          <TodoList />
-          <ThemeToggler />
-        </div>
+        <Tabs />
       </main>
       
       <footer>

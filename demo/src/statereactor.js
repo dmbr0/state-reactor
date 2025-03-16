@@ -3,8 +3,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 // Registry for all actors - use a Map for better reliability
 const registry = new Map();
 
+// Mailboxes for queuing messages
+const mailboxes = new Map();
+
 // Function to get the registry (for debugging)
 export const getRegistry = () => registry;
+
+// Function to get the mailboxes (for debugging)
+export const getMailboxes = () => mailboxes;
 
 // For debugging
 const logRegistry = () => {
@@ -29,19 +35,117 @@ export const registerActor = (actorId, callback) => {
   };
 };
 
+// Create or get a mailbox for an actor
+export const getMailbox = (actorId) => {
+  if (!mailboxes.has(actorId)) {
+    console.log(`Creating new mailbox for actor: ${actorId}`);
+    mailboxes.set(actorId, {
+      queue: [],
+      autoProcess: true,
+      processInterval: 100, // Default process interval in ms
+      intervalId: null
+    });
+  }
+  return mailboxes.get(actorId);
+};
+
+// Process a message from the mailbox
+export const processMessage = (actorId, count = 1) => {
+  console.log(`Processing ${count} message(s) for ${actorId}`);
+  const mailbox = mailboxes.get(actorId);
+  const callback = registry.get(actorId);
+  
+  if (!mailbox || mailbox.queue.length === 0) {
+    console.log(`No messages to process for ${actorId}`);
+    return 0;
+  }
+  
+  if (!callback) {
+    console.warn(`Actor ${actorId} not found for processing messages`);
+    return 0;
+  }
+  
+  let processed = 0;
+  for (let i = 0; i < count && mailbox.queue.length > 0; i++) {
+    const message = mailbox.queue.shift();
+    console.log(`Processing message for ${actorId}:`, message);
+    callback(message);
+    processed++;
+  }
+  
+  return processed;
+};
+
+// Process all messages in the mailbox
+export const processAllMessages = (actorId) => {
+  const mailbox = mailboxes.get(actorId);
+  if (!mailbox) return 0;
+  
+  const count = mailbox.queue.length;
+  processMessage(actorId, count);
+  return count;
+};
+
+// Configure the mailbox settings
+export const configureMailbox = (actorId, config) => {
+  const mailbox = getMailbox(actorId);
+  
+  if (config.autoProcess !== undefined) {
+    mailbox.autoProcess = config.autoProcess;
+    
+    // Clear existing interval if there is one
+    if (mailbox.intervalId) {
+      clearInterval(mailbox.intervalId);
+      mailbox.intervalId = null;
+    }
+    
+    // Set up new interval if auto-processing is enabled
+    if (mailbox.autoProcess && config.processInterval) {
+      mailbox.processInterval = config.processInterval;
+      mailbox.intervalId = setInterval(() => {
+        processMessage(actorId, 1);
+      }, mailbox.processInterval);
+    }
+  } else if (config.processInterval && mailbox.autoProcess) {
+    // Update interval timing if auto-processing is already enabled
+    mailbox.processInterval = config.processInterval;
+    
+    if (mailbox.intervalId) {
+      clearInterval(mailbox.intervalId);
+    }
+    
+    mailbox.intervalId = setInterval(() => {
+      processMessage(actorId, 1);
+    }, mailbox.processInterval);
+  }
+  
+  return mailbox;
+};
+
 // Send a message to a specific actor
 export const sendMessage = (targetId, message) => {
   console.log(`Sending message to ${targetId}:`, message);
-  const callback = registry.get(targetId);
   
-  if (callback) {
-    callback(message);
-    return true;
-  } else {
+  if (!registry.has(targetId)) {
     console.warn(`No actor found with ID: ${targetId}`);
     logRegistry();
     return false;
   }
+  
+  // Get or create a mailbox for this actor
+  const mailbox = getMailbox(targetId);
+  
+  // Add the message to the queue
+  mailbox.queue.push(message);
+  console.log(`Added message to ${targetId} mailbox. Queue size: ${mailbox.queue.length}`);
+  
+  // Process immediately if auto-processing is enabled
+  if (mailbox.autoProcess && mailbox.queue.length === 1) {
+    // If this is the first message and auto-processing is on, process it immediately
+    processMessage(targetId, 1);
+  }
+  
+  return true;
 };
 
 // Broadcast a message to all actors except the sender
@@ -53,10 +157,9 @@ export const broadcastMessage = (senderId, message) => {
   // Handle targeted broadcast - only send to target if specified
   if (message.target) {
     console.log(`Message has target: ${message.target}`);
-    const callback = registry.get(message.target);
-    if (callback) {
+    if (registry.has(message.target)) {
       console.log(`Delivering targeted message to ${message.target}`);
-      callback(message);
+      sendMessage(message.target, message);
     } else {
       console.warn(`Target ${message.target} not found for message`);
       logRegistry();
@@ -68,7 +171,7 @@ export const broadcastMessage = (senderId, message) => {
   registry.forEach((callback, actorId) => {
     if (actorId !== senderId) {
       console.log(`Delivering to ${actorId}`);
-      callback(message);
+      sendMessage(actorId, message);
     }
   });
 };
@@ -76,10 +179,7 @@ export const broadcastMessage = (senderId, message) => {
 // Create an event emitter for self-broadcasting
 const selfBroadcast = (id, message) => {
   console.log(`Self broadcast from ${id}:`, message);
-  const callback = registry.get(id);
-  if (callback) {
-    callback(message);
-  }
+  sendMessage(id, message);
 };
 
 // Generate unique IDs
@@ -95,6 +195,13 @@ export const useActor = (actorId, initialState, messageHandler) => {
   // Create state and stateRef for handling updates
   const [state, setState] = useState(initialState);
   const stateRef = useRef(state);
+  
+  // Create a state for mailbox info
+  const [mailboxInfo, setMailboxInfo] = useState({
+    queue: [],
+    autoProcess: true,
+    processInterval: 100
+  });
   
   // Keep the ref updated with the latest state
   useEffect(() => {
@@ -128,11 +235,44 @@ export const useActor = (actorId, initialState, messageHandler) => {
   useEffect(() => {
     console.log(`Actor ${id} mounting and registering`);
     const unregister = registerActor(id, stableHandler);
+    
+    // Initialize the mailbox
+    getMailbox(id);
+    
+    // Clean up on unmount
     return () => {
       console.log(`Actor ${id} unmounting and unregistering`);
       unregister();
+      
+      // Clean up any auto-processing interval
+      const mailbox = mailboxes.get(id);
+      if (mailbox && mailbox.intervalId) {
+        clearInterval(mailbox.intervalId);
+      }
     };
   }, [id, stableHandler]);
+  
+  // Update mailbox info for UI
+  useEffect(() => {
+    const updateMailboxInfo = () => {
+      const mailbox = mailboxes.get(id);
+      if (mailbox) {
+        setMailboxInfo({
+          queue: [...mailbox.queue], // Make a copy to trigger re-render
+          autoProcess: mailbox.autoProcess,
+          processInterval: mailbox.processInterval
+        });
+      }
+    };
+    
+    // Update immediately
+    updateMailboxInfo();
+    
+    // Set up interval to periodically update mailbox info
+    const infoInterval = setInterval(updateMailboxInfo, 200);
+    
+    return () => clearInterval(infoInterval);
+  }, [id]);
 
   // Method to send messages to other actors
   const send = useCallback((targetId, message) => {
@@ -162,13 +302,36 @@ export const useActor = (actorId, initialState, messageHandler) => {
       sender: message.sender || id
     });
   }, [id]);
+  
+  // Process a single message from the mailbox
+  const processNextMessage = useCallback(() => {
+    return processMessage(id, 1);
+  }, [id]);
+  
+  // Process all messages in the mailbox
+  const processAllMessages = useCallback(() => {
+    const mailbox = mailboxes.get(id);
+    if (!mailbox) return 0;
+    
+    const count = mailbox.queue.length;
+    return processMessage(id, count);
+  }, [id]);
+  
+  // Configure mailbox settings
+  const configureActorMailbox = useCallback((config) => {
+    return configureMailbox(id, config);
+  }, [id]);
 
   return {
     state,
     setState,
     send,
     broadcast,
-    id
+    id,
+    mailbox: mailboxInfo,
+    processNextMessage,
+    processAllMessages,
+    configureMailbox: configureActorMailbox
   };
 };
 

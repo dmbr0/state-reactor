@@ -65,7 +65,7 @@ footer {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: 2fr 1fr;
   gap: 1.5rem;
 }
 
@@ -86,6 +86,17 @@ footer {
   border-bottom: 1px solid var(--border-color);
   padding-bottom: 0.5rem;
   font-size: 1.2rem;
+}
+
+.component h3 {
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.3rem;
+  font-size: 1.1rem;
+}
+
+.component.compact {
+  padding: 1rem;
 }
 
 /* Registry Viewer Component */
@@ -123,25 +134,26 @@ footer {
 
 /* Counter Component */
 .counter .value {
-  font-size: 3rem;
+  font-size: 2.5rem;
   font-weight: bold;
   text-align: center;
-  margin: 1rem 0;
+  margin: 0.5rem 0;
   color: var(--primary-color);
 }
 
 .counter-buttons {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-direction: row;
+  gap: 0.75rem;
   margin: 0 auto;
-  max-width: 200px;
+  justify-content: center;
+  max-width: 350px;
 }
 
 .counter-button {
-  width: 100%;
-  height: 3rem;
-  font-size: 1.5rem;
+  width: 80px;
+  height: 2.5rem;
+  font-size: 1.2rem;
   border-radius: 0.5rem;
   transition: all 0.2s;
   position: relative;
@@ -154,8 +166,8 @@ footer {
 }
 
 /* Messaging Components */
-.messaging-container {
-  grid-column: span 2;
+.messaging-section {
+  width: 100%;
 }
 
 .message-sender .controls {
@@ -172,9 +184,9 @@ footer {
   color: var(--text-color);
 }
 
-.displays {
+.displays-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -223,7 +235,7 @@ footer {
 
 /* Todo List */
 .todo-list {
-  grid-column: span 2;
+  width: 100%;
 }
 
 .add-todo {
@@ -268,6 +280,174 @@ footer {
   margin-bottom: 1rem;
 }
 
+/* Mailbox Components */
+.message-display-container,
+.todo-container,
+.theme-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.counter-container {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  gap: 1.5rem;
+}
+
+.mailbox-viewer {
+  max-height: none;
+  min-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.counter-container .mailbox-viewer {
+  min-height: 450px;
+  flex: 1;
+}
+
+.mailbox-controls {
+  margin-bottom: 1rem;
+}
+
+.controls-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.auto-process {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  background-color: var(--bg-color);
+  border-radius: 0.25rem;
+  border: 1px solid var(--border-color);
+  margin-top: 0.5rem;
+}
+
+.auto-process label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rate-control {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rate-control input {
+  width: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.rate-values {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--secondary-color);
+}
+
+.rate-values span {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.apply-btn {
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
+}
+
+.mailbox-messages {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background-color: var(--bg-color);
+  border-radius: 0.25rem;
+  border: 1px solid var(--border-color);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.mailbox-messages h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+}
+
+.message-item {
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.25rem;
+  background-color: var(--component-bg);
+  border-left: 3px solid var(--accent-color);
+}
+
+.message-type {
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.message-payload {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+.message-sender {
+  font-size: 0.8rem;
+  color: var(--secondary-color);
+}
+
+/* Tabs Component */
+.tabs-container {
+  width: 100%;
+}
+
+.tabs-header {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.tab-button {
+  padding: 0.75rem 1.5rem;
+  background-color: transparent;
+  color: var(--text-color);
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.tab-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.tab-button.active {
+  color: var(--primary-color);
+  border-bottom: 2px solid var(--primary-color);
+}
+
+.tab-content {
+  padding: 1rem 0;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 /* Buttons */
 button {
   padding: 0.5rem 1rem;
@@ -285,4 +465,19 @@ button:hover {
 
 button:active {
   transform: translateY(1px);
+}
+
+/* Override for tab buttons */
+.tab-button {
+  background-color: transparent;
+  color: var(--text-color);
+}
+
+.tab-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--primary-color);
+}
+
+.tab-button.active:hover {
+  background-color: transparent;
 }
