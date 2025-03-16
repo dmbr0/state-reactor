@@ -2,8 +2,11 @@
   --bg-color: #f5f7fa;
   --text-color: #333;
   --primary-color: #4a6cf7;
+  --primary-color-rgb: 74, 108, 247;
   --secondary-color: #6c757d;
+  --secondary-color-rgb: 108, 117, 125;
   --accent-color: #39c0ed;
+  --accent-color-rgb: 57, 192, 237;
   --border-color: #dee2e6;
   --component-bg: #ffffff;
   --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -13,8 +16,11 @@ body.dark {
   --bg-color: #1f2937;
   --text-color: #e5e7eb;
   --primary-color: #60a5fa;
+  --primary-color-rgb: 96, 165, 250;
   --secondary-color: #9ca3af;
+  --secondary-color-rgb: 156, 163, 175;
   --accent-color: #34d399;
+  --accent-color-rgb: 52, 211, 153;
   --border-color: #374151;
   --component-bg: #111827;
   --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
@@ -329,11 +335,23 @@ footer {
   margin-top: 0.5rem;
 }
 
+.auto-process-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
 .auto-process label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+}
+
+.realtime-toggle {
+  background-color: rgba(var(--primary-color-rgb), 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
 .rate-control {

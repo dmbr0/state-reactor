@@ -89,34 +89,39 @@ export const processAllMessages = (actorId) => {
 // Configure the mailbox settings
 export const configureMailbox = (actorId, config) => {
   const mailbox = getMailbox(actorId);
+  let needsIntervalUpdate = false;
   
+  // Handle auto-processing toggle
   if (config.autoProcess !== undefined) {
     mailbox.autoProcess = config.autoProcess;
-    
+    needsIntervalUpdate = true;
+  }
+  
+  // Handle process interval change
+  if (config.processInterval !== undefined) {
+    console.log(`Setting process interval for ${actorId} to ${config.processInterval}ms`);
+    mailbox.processInterval = config.processInterval;
+    needsIntervalUpdate = true;
+  }
+  
+  // Update interval if needed
+  if (needsIntervalUpdate) {
     // Clear existing interval if there is one
     if (mailbox.intervalId) {
+      console.log(`Clearing existing interval for ${actorId}`);
       clearInterval(mailbox.intervalId);
       mailbox.intervalId = null;
     }
     
     // Set up new interval if auto-processing is enabled
-    if (mailbox.autoProcess && config.processInterval) {
-      mailbox.processInterval = config.processInterval;
+    if (mailbox.autoProcess) {
+      console.log(`Setting up new interval for ${actorId} at ${mailbox.processInterval}ms`);
       mailbox.intervalId = setInterval(() => {
-        processMessage(actorId, 1);
+        if (mailboxes.get(actorId)?.queue.length > 0) {
+          processMessage(actorId, 1);
+        }
       }, mailbox.processInterval);
     }
-  } else if (config.processInterval && mailbox.autoProcess) {
-    // Update interval timing if auto-processing is already enabled
-    mailbox.processInterval = config.processInterval;
-    
-    if (mailbox.intervalId) {
-      clearInterval(mailbox.intervalId);
-    }
-    
-    mailbox.intervalId = setInterval(() => {
-      processMessage(actorId, 1);
-    }, mailbox.processInterval);
   }
   
   return mailbox;
@@ -139,9 +144,9 @@ export const sendMessage = (targetId, message) => {
   mailbox.queue.push(message);
   console.log(`Added message to ${targetId} mailbox. Queue size: ${mailbox.queue.length}`);
   
-  // Process immediately if auto-processing is enabled
-  if (mailbox.autoProcess && mailbox.queue.length === 1) {
-    // If this is the first message and auto-processing is on, process it immediately
+  // If this is the first message and auto-processing is on with realtime (1ms) setting,
+  // process it immediately instead of waiting for the interval
+  if (mailbox.autoProcess && mailbox.processInterval <= 5 && mailbox.queue.length === 1) {
     processMessage(targetId, 1);
   }
   

@@ -51,19 +51,46 @@ function RegistryViewer() {
 
 // Mailbox Controls Component
 function MailboxControls({ actorId, mailbox, onProcess, onProcessAll, onConfigure }) {
+  // Initialize state based on mailbox settings
   const [processingRate, setProcessingRate] = React.useState(mailbox.processInterval);
+  const [isRealtime, setIsRealtime] = React.useState(mailbox.processInterval <= 5);
+  
+  // Update local state when mailbox settings change
+  React.useEffect(() => {
+    setProcessingRate(mailbox.processInterval);
+    setIsRealtime(mailbox.processInterval <= 5);
+  }, [mailbox.processInterval]);
   
   const handleAutoProcessToggle = () => {
-    onConfigure({ autoProcess: !mailbox.autoProcess, processInterval: processingRate });
+    // When toggling auto-process, use the current processing rate
+    onConfigure({ 
+      autoProcess: !mailbox.autoProcess, 
+      processInterval: isRealtime ? 1 : processingRate 
+    });
   };
   
   const handleRateChange = (e) => {
     const newRate = parseInt(e.target.value, 10);
     setProcessingRate(newRate);
+    setIsRealtime(false);
+    // Don't apply changes immediately - wait for Apply button
   };
   
   const applyRateChange = () => {
+    console.log(`Applying rate change to ${processingRate}ms`);
     onConfigure({ processInterval: processingRate });
+  };
+  
+  const toggleRealtime = () => {
+    const newIsRealtime = !isRealtime;
+    setIsRealtime(newIsRealtime);
+    
+    // Set to 1ms for realtime or to the slider value for regular mode
+    const newInterval = newIsRealtime ? 1 : processingRate;
+    console.log(`Setting ${newIsRealtime ? 'realtime' : 'normal'} mode: ${newInterval}ms`);
+    
+    // Apply changes immediately when toggling realtime
+    onConfigure({ processInterval: newInterval });
   };
   
   return (
@@ -77,35 +104,49 @@ function MailboxControls({ actorId, mailbox, onProcess, onProcessAll, onConfigur
         </button>
       </div>
       <div className="controls-row auto-process">
-        <label>
-          <input 
-            type="checkbox" 
-            checked={mailbox.autoProcess} 
-            onChange={handleAutoProcessToggle}
-          />
-          Auto-Process
-        </label>
+        <div className="auto-process-header">
+          <label>
+            <input 
+              type="checkbox" 
+              checked={mailbox.autoProcess} 
+              onChange={handleAutoProcessToggle}
+            />
+            Auto-Process
+          </label>
+          <label className="realtime-toggle">
+            <input 
+              type="checkbox"
+              checked={isRealtime}
+              onChange={toggleRealtime}
+              disabled={!mailbox.autoProcess}
+            />
+            Realtime
+          </label>
+        </div>
         <div className="rate-control">
           <input 
             type="range" 
-            min="50" 
+            min="10" 
             max="1000" 
-            step="50" 
+            step="10" 
             value={processingRate} 
             onChange={handleRateChange}
-            disabled={!mailbox.autoProcess}
+            disabled={!mailbox.autoProcess || isRealtime}
           />
           <div className="rate-values">
             <span>Fast</span>
             <span>
-              {processingRate}ms
-              <button 
-                className="apply-btn" 
-                onClick={applyRateChange}
-                disabled={!mailbox.autoProcess || processingRate === mailbox.processInterval}
-              >
-                Apply
-              </button>
+              {isRealtime ? "1ms (Realtime)" : `${processingRate}ms`}
+              {!isRealtime && (
+                <button 
+                  className="apply-btn" 
+                  onClick={applyRateChange}
+                  disabled={!mailbox.autoProcess || processingRate === mailbox.processInterval}
+                  title={processingRate === mailbox.processInterval ? 'Already using this rate' : 'Apply this rate'}
+                >
+                  Apply
+                </button>
+              )}
             </span>
             <span>Slow</span>
           </div>
