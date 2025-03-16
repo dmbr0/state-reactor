@@ -11,8 +11,16 @@ export interface Message {
 
 export type MessageHandler<S> = (state: S, message: Message) => S | void;
 
+export interface Mailbox {
+  id: string;
+  queue: Message[];
+  isProcessing: boolean;
+  processRate?: number; // Processing rate in ms (for throttling)
+}
+
 export interface ActorHandle {
   id: string;
+  mailbox: Mailbox;
   handle: (message: Message) => void;
 }
 
@@ -30,6 +38,9 @@ export interface ActorHookResult<S> {
   send: (targetId: string, message: Message) => boolean;
   broadcast: (message: Message) => void;
   id: string;
+  mailbox: Mailbox;
+  processMailbox: () => void;
+  mailboxSize: number;
 }
 
 export interface SenderHookResult {
@@ -42,5 +53,6 @@ export interface ActorComponentProps<S> {
   id?: string;
   initialState: S;
   messageHandler: MessageHandler<S>;
+  processRate?: number; // Optional rate limit for processing messages (ms)
   children: (props: ActorHookResult<S>) => React.ReactNode;
 }
